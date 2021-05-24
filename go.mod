@@ -1,4 +1,4 @@
-module github.com/contejus/dca
+module github.com/robrotheram/dca
 
 go 1.16
 
