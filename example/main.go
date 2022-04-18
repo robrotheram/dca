@@ -3,10 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"github.com/jonas747/dca"
 	"io"
 	"io/ioutil"
+
+	"github.com/bwmarrin/discordgo"
+	"github.com/jonas747/dca"
+
 	//"io/ioutil"
 	"log"
 	"os/exec"
@@ -78,7 +80,7 @@ func main() {
 	files, _ := ioutil.ReadDir(*Folder)
 	for _, f := range files {
 		fmt.Println("PlayAudioFile:", f.Name())
-		discord.UpdateStatus(0, f.Name())
+		//discord.UpdateStatus(0, f.Name())
 		PlayAudioFile(voice, fmt.Sprintf("%s/%s", *Folder, f.Name()))
 	}
 

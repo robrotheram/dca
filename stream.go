@@ -2,10 +2,11 @@ package dca
 
 import (
 	"errors"
-	"github.com/bwmarrin/discordgo"
 	"io"
 	"sync"
 	"time"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 var (
@@ -100,7 +101,7 @@ func (s *StreamingSession) readNext() error {
 	}
 
 	// Timeout after 100ms (Maybe this needs to be changed?)
-	timeOut := time.NewTimer(time.Second)
+	timeOut := time.NewTimer(5 * time.Second)
 
 	// This will attempt to send on the channel before the timeout, which is 5s
 	select {
