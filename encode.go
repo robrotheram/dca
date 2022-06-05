@@ -122,10 +122,10 @@ type Frame struct {
 
 type EncodeSession struct {
 	sync.Mutex
-	options    *EncodeOptions
-	pipeReader io.Reader
-	filePath   string
-
+	options      *EncodeOptions
+	pipeReader   io.Reader
+	filePath     string
+	isURL        bool
 	running      bool
 	started      time.Time
 	frameChannel chan *Frame
@@ -152,6 +152,7 @@ func EncodeMem(r io.Reader, options *EncodeOptions) (session *EncodeSession, err
 	session = &EncodeSession{
 		options:      options,
 		pipeReader:   r,
+		isURL:        false,
 		frameChannel: make(chan *Frame, options.BufferedFrames),
 	}
 	go session.run()
@@ -168,6 +169,7 @@ func EncodeFile(path string, options *EncodeOptions) (session *EncodeSession, er
 	session = &EncodeSession{
 		options:      options,
 		filePath:     path,
+		isURL:        strings.HasPrefix(path, "http"),
 		frameChannel: make(chan *Frame, options.BufferedFrames),
 	}
 	go session.run()
@@ -200,12 +202,15 @@ func (e *EncodeSession) run() {
 	}
 
 	// Launch ffmpeg with a variety of different fruits and goodies mixed togheter
-	args := []string{
-		"-stats",
-		"-reconnect", "1",
-		"-reconnect_at_eof", "1",
-		"-reconnect_streamed", "1",
-		"-reconnect_delay_max", "2",
+	args := []string{"-stats"}
+	if e.isURL {
+		args = append(args, []string{
+			"-reconnect", "1",
+			"-reconnect_streamed", "1",
+			"-reconnect_delay_max", "2",
+		}...)
+	}
+	args = append(args, []string{
 		"-i", inFile,
 		"-map", "0:a",
 		"-acodec", "libopus",
@@ -221,7 +226,7 @@ func (e *EncodeSession) run() {
 		"-packet_loss", strconv.Itoa(e.options.PacketLoss),
 		"-threads", strconv.Itoa(e.options.Threads),
 		"-ss", strconv.Itoa(e.options.StartTime),
-	}
+	}...)
 
 	if e.options.AudioFilter != "" {
 		// Lit af
