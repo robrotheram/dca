@@ -31,7 +31,7 @@ var (
 )
 
 var (
-	ErrBadFrame = errors.New("Bad Frame")
+	ErrBadFrame = errors.New("bad frame")
 )
 
 // EncodeOptions is a set of options for encoding dca
@@ -66,27 +66,27 @@ func (e EncodeOptions) PCMFrameLen() int {
 // Validate returns an error if the options are not correct
 func (opts *EncodeOptions) Validate() error {
 	if opts.Volume < 0 || opts.Volume > 512 {
-		return errors.New("Out of bounds volume (0-512)")
+		return errors.New("out of bounds volume (0-512)")
 	}
 
 	if opts.FrameDuration != 20 && opts.FrameDuration != 40 && opts.FrameDuration != 60 {
-		return errors.New("Invalid FrameDuration")
+		return errors.New("invalid FrameDuration")
 	}
 
 	if opts.PacketLoss < 0 || opts.PacketLoss > 100 {
-		return errors.New("Invalid packet loss percentage")
+		return errors.New("invalid packet loss percentage")
 	}
 
 	if opts.Application != AudioApplicationAudio && opts.Application != AudioApplicationVoip && opts.Application != AudioApplicationLowDelay {
-		return errors.New("Invalid audio application")
+		return errors.New("invalid audio application")
 	}
 
 	if opts.CompressionLevel < 0 || opts.CompressionLevel > 10 {
-		return errors.New("Compression level out of bounds (0-10)")
+		return errors.New("compression level out of bounds (0-10)")
 	}
 
 	if opts.Threads < 0 {
-		return errors.New("Number of threads can't be less than 0")
+		return errors.New("number of threads can't be less than 0")
 	}
 
 	return nil
@@ -122,10 +122,10 @@ type Frame struct {
 
 type EncodeSession struct {
 	sync.Mutex
-	options      *EncodeOptions
-	pipeReader   io.Reader
-	filePath     string
-	isURL        bool
+	options    *EncodeOptions
+	pipeReader io.Reader
+	filePath   string
+
 	running      bool
 	started      time.Time
 	frameChannel chan *Frame
@@ -144,34 +144,32 @@ type EncodeSession struct {
 
 // EncodedMem encodes data from memory
 func EncodeMem(r io.Reader, options *EncodeOptions) (session *EncodeSession, err error) {
-	err = options.Validate()
-	if err != nil {
+	if err = options.Validate(); err != nil {
 		return
 	}
 
 	session = &EncodeSession{
 		options:      options,
 		pipeReader:   r,
-		isURL:        false,
 		frameChannel: make(chan *Frame, options.BufferedFrames),
 	}
+
 	go session.run()
 	return
 }
 
 // EncodeFile encodes the file/url/other in path
 func EncodeFile(path string, options *EncodeOptions) (session *EncodeSession, err error) {
-	err = options.Validate()
-	if err != nil {
+	if err = options.Validate(); err != nil {
 		return
 	}
 
 	session = &EncodeSession{
 		options:      options,
 		filePath:     path,
-		isURL:        strings.HasPrefix(path, "http"),
 		frameChannel: make(chan *Frame, options.BufferedFrames),
 	}
+
 	go session.run()
 	return
 }
@@ -187,9 +185,14 @@ func (e *EncodeSession) run() {
 	e.Lock()
 	e.running = true
 
+	regularFile := false
 	inFile := "pipe:0"
+
 	if e.filePath != "" {
 		inFile = e.filePath
+		if info, err := os.Stat(inFile); err == nil && info.Mode().IsRegular() {
+			regularFile = true
+		}
 	}
 
 	if e.options == nil {
@@ -202,15 +205,8 @@ func (e *EncodeSession) run() {
 	}
 
 	// Launch ffmpeg with a variety of different fruits and goodies mixed togheter
-	args := []string{"-stats"}
-	if e.isURL {
-		args = append(args, []string{
-			"-reconnect", "1",
-			"-reconnect_streamed", "1",
-			"-reconnect_delay_max", "2",
-		}...)
-	}
-	args = append(args, []string{
+	args := []string{
+		"-stats",
 		"-i", inFile,
 		"-map", "0:a",
 		"-acodec", "libopus",
@@ -225,8 +221,20 @@ func (e *EncodeSession) run() {
 		"-frame_duration", strconv.Itoa(e.options.FrameDuration),
 		"-packet_loss", strconv.Itoa(e.options.PacketLoss),
 		"-threads", strconv.Itoa(e.options.Threads),
-		"-ss", strconv.Itoa(e.options.StartTime),
-	}...)
+	}
+
+	if !regularFile {
+		args = append([]string{
+			"-reconnect", "1",
+			"-reconnect_at_eof", "1",
+			"-reconnect_streamed", "1",
+			"-reconnect_delay_max", "2",
+		}, args...)
+	}
+
+	if e.options.StartTime > 0 {
+		args = append(args, "-ss", strconv.Itoa(e.options.StartTime))
+	}
 
 	if e.options.AudioFilter != "" {
 		// Lit af
@@ -264,8 +272,7 @@ func (e *EncodeSession) run() {
 	}
 
 	// Starts the ffmpeg command
-	err = ffmpeg.Start()
-	if err != nil {
+	if err = ffmpeg.Start(); err != nil {
 		e.Unlock()
 		logln("RunStart Error:", err)
 		close(e.frameChannel)
@@ -284,8 +291,8 @@ func (e *EncodeSession) run() {
 	defer close(e.frameChannel)
 	e.readStdout(stdout)
 	wg.Wait()
-	err = ffmpeg.Wait()
-	if err != nil {
+
+	if err = ffmpeg.Wait(); err != nil {
 		if err.Error() != "signal: killed" {
 			e.Lock()
 			e.err = err
@@ -324,20 +331,18 @@ func (e *EncodeSession) writeMetadataFrame() {
 		ffprobe := exec.Command("ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", e.filePath)
 		ffprobe.Stdout = &cmdBuf
 
-		err := ffprobe.Start()
-		if err != nil {
+		if err := ffprobe.Start(); err != nil {
 			logln("RunStart Error:", err)
 			return
 		}
 
-		err = ffprobe.Wait()
-		if err != nil {
+		if err := ffprobe.Wait(); err != nil {
 			logln("FFprobe Error:", err)
 			return
 		}
+
 		var ffprobeData *FFprobeMetadata
-		err = json.Unmarshal(cmdBuf.Bytes(), &ffprobeData)
-		if err != nil {
+		if err := json.Unmarshal(cmdBuf.Bytes(), &ffprobeData); err != nil {
 			logln("Erorr unmarshaling the FFprobe JSON:", err)
 			return
 		}
@@ -377,21 +382,18 @@ func (e *EncodeSession) writeMetadataFrame() {
 		cover := exec.Command("ffmpeg", "-loglevel", "0", "-i", e.filePath, "-f", "singlejpeg", "pipe:1")
 		cover.Stdout = &cmdBuf
 
-		err = cover.Start()
-		if err != nil {
+		if err = cover.Start(); err != nil {
 			logln("RunStart Error:", err)
 			return
 		}
+
 		var pngBuf bytes.Buffer
-		err = cover.Wait()
-		if err == nil {
+		if err = cover.Wait(); err == nil {
 			buf := bytes.NewBufferString(cmdBuf.String())
 			var coverImage string
 			if e.options.CoverFormat == "png" {
-				img, err := jpeg.Decode(buf)
-				if err == nil { // silently drop it, no image
-					err = png.Encode(&pngBuf, img)
-					if err == nil {
+				if img, err := jpeg.Decode(buf); err == nil { // silently drop it, no image
+					if err = png.Encode(&pngBuf, img); err == nil {
 						coverImage = base64.StdEncoding.EncodeToString(pngBuf.Bytes())
 					}
 				}
@@ -422,8 +424,7 @@ func (e *EncodeSession) writeMetadataFrame() {
 
 	// Write the actual json data and length
 	jsonLen := int32(len(jsonData))
-	err = binary.Write(&buf, binary.LittleEndian, &jsonLen)
-	if err != nil {
+	if err = binary.Write(&buf, binary.LittleEndian, &jsonLen); err != nil {
 		logln("Couldn't write json len:", err)
 		return
 	}
@@ -520,8 +521,7 @@ func (e *EncodeSession) readStdout(stdout io.ReadCloser) {
 			break
 		}
 
-		err = e.writeOpusFrame(packet)
-		if err != nil {
+		if err = e.writeOpusFrame(packet); err != nil {
 			logln("Error writing opus frame:", err)
 			break
 		}
@@ -536,8 +536,7 @@ func (e *EncodeSession) writeOpusFrame(opusFrame []byte) error {
 		return err
 	}
 
-	_, err = dcaBuf.Write(opusFrame)
-	if err != nil {
+	if _, err = dcaBuf.Write(opusFrame); err != nil {
 		return err
 	}
 
@@ -555,7 +554,7 @@ func (e *EncodeSession) Stop() error {
 	e.Lock()
 	defer e.Unlock()
 	if !e.running || e.process == nil {
-		return errors.New("Not running")
+		return errors.New("not running")
 	}
 
 	err := e.process.Kill()
@@ -631,7 +630,7 @@ func (e *EncodeSession) Truncate() {
 func (e *EncodeSession) Cleanup() {
 	e.Stop()
 
-	for _ = range e.frameChannel {
+	for range e.frameChannel {
 		// empty till closed
 		// Cats can be right-pawed or left-pawed.
 	}
