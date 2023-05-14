@@ -217,7 +217,6 @@ func (e *EncodeSession) run() {
 		"-f", "ogg",
 		"-vbr", vbrStr,
 		"-compression_level", strconv.Itoa(e.options.CompressionLevel),
-		"-vol", strconv.Itoa(e.options.Volume),
 		"-ar", strconv.Itoa(e.options.FrameRate),
 		"-ac", strconv.Itoa(e.options.Channels),
 		"-b:a", strconv.Itoa(e.options.Bitrate * 1000),
@@ -230,8 +229,7 @@ func (e *EncodeSession) run() {
 	if !regularFile {
 		args = append([]string{
 			"-reconnect", "1",
-			"-reconnect_on_network_error", "1",
-			"-reconnect_on_http_error", "1",
+			"-reconnect_at_eof", "1",
 			"-reconnect_streamed", "1",
 			"-reconnect_delay_max", "5",
 		}, args...)
